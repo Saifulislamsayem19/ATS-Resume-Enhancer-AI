@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResumeAI | AI-Powered Resume Optimization</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-file-alt"></i>
+                <h1>ResumeAI</h1>
+            </div>
+            <p class="tagline">AI-Powered Resume Optimization for Job Success</p>
+        </header>
+
+        <main>
+            <section class="upload-section" id="upload-section">
+                <div class="card">
+                    <h2>Upload Your Resume & Job Description</h2>
+                    <p>Our AI will analyze your resume against the job description and provide optimization recommendations.</p>
+                    
+                    <form id="resume-form" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="resume">
+                                <i class="fas fa-file-upload"></i> Upload Resume (PDF or DOC)
+                            </label>
+                            <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx" required>
+                            <div class="file-info" id="file-info">No file selected</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="job-description">
+                                <i class="fas fa-clipboard-list"></i> Paste Job Description
+                            </label>
+                            <textarea id="job-description" name="job_description" rows="8" required placeholder="Paste the full job description here..."></textarea>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button type="button" class="btn primary" id="analyze-ats-btn">
+                                <i class="fas fa-chart-line"></i> Analyze & Optimize Resume
+                            </button>
+                            <button type="button" class="btn secondary" id="generate-cover-letter-btn">
+                                <i class="fas fa-envelope"></i> Generate Cover Letter
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section class="loading-section hidden" id="loading-section">
+                <div class="card">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                    </div>
+                    <h2 id="loading-title">Processing Your Resume</h2>
+                    <p id="loading-description">Our AI is analyzing your resume and generating optimizations. This may take a minute...</p>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" id="progress-bar-fill"></div>
+                    </div>
+                    <div class="progress-step" id="progress-step">Analyzing keywords...</div>
+                </div>
+            </section>
+
+            <!-- ATS Results Section -->
+            <section class="results-section hidden" id="ats-results-section">
+                <div class="results-container">
+                    <!-- ATS Score Card -->
+                    <div class="card results-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-chart-pie"></i> ATS Compatibility Score</h2>
+                        </div>
+                        <div class="card-content">
+                            <div class="ats-score">
+                                <div class="score-circle" id="total-score-circle">
+                                    <span class="score-value" id="total-score-value">0</span>
+                                    <span class="score-label">ATS Score</span>
+                                </div>
+                            </div>
+
+                            <div class="score-breakdown">
+                                <h3>Score Breakdown</h3>
+                                <div class="score-item expandable">
+                                    <div class="score-header">
+                                        <div class="score-label">Searchability</div>
+                                        <div class="score-bar-container">
+                                            <div class="score-bar" id="searchability-bar"></div>
+                                            <span class="score-percent" id="searchability-percent">0%</span>
+                                        </div>
+                                        <div class="score-summary">Visibility of key resume elements. <span id="searchability-issues">0</span> issues to fix. <i class="fas fa-chevron-down expand-icon"></i></div>
+                                    </div>
+                                    <div class="score-details">
+                                        <div class="improvement-content" id="searchability-improvements">
+                                            <!-- Content will be populated from LLM response -->
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="score-item expandable">
+                                    <div class="score-header">
+                                        <div class="score-label">Hard & Soft Skills</div>
+                                        <div class="score-bar-container">
+                                            <div class="score-bar" id="skills-balance-bar"></div>
+                                            <span class="score-percent" id="skills-balance-percent">0%</span>
+                                        </div>
+                                        <div class="score-summary">Matching job description keywords. <span id="skills-issues">0</span> issues to fix. <i class="fas fa-chevron-down expand-icon"></i></div>
+                                    </div>
+                                    <div class="score-details">
+                                        <div class="improvement-content" id="skills-balance-improvements">
+                                            <!-- Content will be populated from LLM response -->
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="score-item expandable">
+                                    <div class="score-header">
+                                        <div class="score-label">Formatting & Readability</div>
+                                        <div class="score-bar-container">
+                                            <div class="score-bar" id="formatting-bar"></div>
+                                            <span class="score-percent" id="formatting-percent">0%</span>
+                                        </div>
+                                        <div class="score-summary">ATS-friendly formatting checks. <span id="formatting-issues">0</span> issues to fix. <i class="fas fa-chevron-down expand-icon"></i></div>
+                                    </div>
+                                    <div class="score-details">
+                                        <div class="improvement-content" id="formatting-improvements">
+                                            <!-- Content will be populated from LLM response -->
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="score-item expandable">
+                                    <div class="score-header">
+                                        <div class="score-label">Section Completion</div>
+                                        <div class="score-bar-container">
+                                            <div class="score-bar" id="section-completion-bar"></div>
+                                            <span class="score-percent" id="section-completion-percent">0%</span>
+                                        </div>
+                                        <div class="score-summary">Presence of essential resume sections. <span id="section-issues">0</span> issues to fix. <i class="fas fa-chevron-down expand-icon"></i></div>
+                                    </div>
+                                    <div class="score-details">
+                                        <div class="improvement-content" id="section-completion-improvements">
+                                            <!-- Content will be populated from LLM response -->
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="score-item expandable">
+                                    <div class="score-header">
+                                        <div class="score-label">Synonym Expansion</div>
+                                        <div class="score-bar-container">
+                                            <div class="score-bar" id="synonym-bar"></div>
+                                            <span class="score-percent" id="synonym-percent">0%</span>
+                                        </div>
+                                        <div class="score-summary">Recognition of skill abbreviations and variations. <span id="synonym-issues">0</span> issues to fix. <i class="fas fa-chevron-down expand-icon"></i></div>
+                                    </div>
+                                    <div class="score-details">
+                                        <div class="improvement-content" id="synonym-improvements">
+                                            <!-- Content will be populated from LLM response -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="missing-keywords" id="missing-keywords-container">
+                                <h3>Missing Keywords</h3>
+                                <div class="keywords-list" id="missing-keywords-list"></div>
+                            </div>
+
+                            <div class="optimization-section">
+                                <h3>Overall Improvement Suggestions</h3>
+                                <div class="section-content">
+                                    <ul id="improvement-suggestions"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Resume Optimization Card -->
+                    <div class="card results-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-file-alt"></i> Resume Optimization</h2>
+                        </div>
+                        <div class="card-content">
+                            <div class="optimization-section">
+                                <h3>Improved Professional Summary</h3>
+                                <div class="section-content" id="improved-summary"></div>
+                            </div>
+
+                            <div class="optimization-section">
+                                <h3>Improved Bullet Points</h3>
+                                <div class="section-content" id="improved-bullets"></div>
+                            </div>
+
+                            <div class="optimization-section">
+                                <h3>Suggested Skills</h3>
+                                <div class="section-content">
+                                    <div class="skills-list" id="suggested-skills-list"></div>
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button class="btn secondary" id="regenerate-ats-btn">
+                                    <i class="fas fa-redo"></i> Regenerate Analysis
+                                </button>
+                                <button class="btn primary" id="download-resume-btn">
+                                    <i class="fas fa-download"></i> Download Resume
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="restart-container">
+                    <button class="btn primary" id="restart-button">
+                        <i class="fas fa-redo"></i> Start New Analysis
+                    </button>
+                </div>
+            </section>
+
+            <!-- Cover Letter Results Section -->
+            <section class="results-section hidden" id="cover-letter-results-section">
+                <div class="results-container">
+                    <div class="card results-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-envelope"></i> Cover Letter</h2>
+                        </div>
+                        <div class="card-content">
+                            <div class="cover-letter-preview" id="cover-letter-preview"></div>
+                            
+                            <div class="action-buttons">
+                                <button class="btn secondary" id="regenerate-cover-letter-btn">
+                                    <i class="fas fa-redo"></i> Regenerate Cover Letter
+                                </button>
+                                <button class="btn primary" id="download-cover-letter-btn">
+                                    <i class="fas fa-download"></i> Download Cover Letter
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="restart-container">
+                    <button class="btn primary" id="restart-cover-letter-button">
+                        <i class="fas fa-redo"></i> Start New Analysis
+                    </button>
+                </div>
+            </section>
+
+            <!-- Preview Modal -->
+            <div class="modal hidden" id="preview-modal">
+                <div class="modal-overlay"></div>
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 id="preview-title">Document Preview</h3>
+                        <button class="close-btn" id="close-preview">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Score Comparison Section (for resume preview) -->
+                        <div class="score-comparison hidden" id="score-comparison">
+                            <div class="comparison-card">
+                                <h4>Score Improvement</h4>
+                                <div class="score-comparison-grid">
+                                    <div class="score-box original">
+                                        <span class="score-label">Original</span>
+                                        <span class="score-value" id="original-score-value">0</span>
+                                    </div>
+                                    <div class="score-box optimized">
+                                        <span class="score-label">Optimized</span>
+                                        <span class="score-value" id="optimized-score-value">0</span>
+                                    </div>
+                                    <div class="score-box improvement">
+                                        <span class="score-label">Improvement</span>
+                                        <span class="score-value improvement-value" id="improvement-value">+0</span>
+                                        <span class="improvement-percentage" id="improvement-percentage">(+0%)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="preview-content" id="preview-content"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn secondary" id="cancel-download">Cancel</button>
+                        <button class="btn primary" id="confirm-download-pdf">
+                            <i class="fas fa-file-pdf"></i> Download PDF
+                        </button>
+                        <button class="btn primary" id="confirm-download-docx">
+                            <i class="fas fa-file-word"></i> Download DOCX
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 ResumeAI - AI-Powered Resume Optimization</p>
+        </footer>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
