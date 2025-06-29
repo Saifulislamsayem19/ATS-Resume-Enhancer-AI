@@ -1,4 +1,5 @@
 import os
+import asyncio
 import PyPDF2
 import docx
 from datetime import datetime
@@ -48,7 +49,11 @@ class CoverLetterOutput(BaseModel):
     cover_letter_text: str = Field(description="Complete cover letter text")
 
 # File processing functions
-def extract_text_from_pdf(file_path):
+async def extract_text_from_pdf(file_path):
+    return await _sync_extract_text_from_pdf(file_path)
+
+async def _sync_extract_text_from_pdf(file_path):
+    # Keep this as async but remove the thread pool executor
     text = ""
     with open(file_path, 'rb') as file:
         pdf_reader = PyPDF2.PdfReader(file)
@@ -56,22 +61,31 @@ def extract_text_from_pdf(file_path):
             text += page.extract_text()
     return text
 
-def extract_text_from_docx(file_path):
+# Similarly update other extraction functions
+async def extract_text_from_docx(file_path):
+    return await _sync_extract_text_from_docx(file_path)
+
+async def _sync_extract_text_from_docx(file_path):
     doc = docx.Document(file_path)
     full_text = []
     for para in doc.paragraphs:
         full_text.append(para.text)
     return '\n'.join(full_text)
 
-def process_resume_file(file, upload_folder):
+# Simplify the file processing
+async def process_resume_file(file, upload_folder):
     filename = secure_filename(file.filename)
     file_path = os.path.join(upload_folder, filename)
-    file.save(file_path)
     
+    # Save file
+    with open(file_path, 'wb') as f:
+        f.write(file.read())
+    
+    # Extract text based on file type
     if filename.endswith('.pdf'):
-        resume_text = extract_text_from_pdf(file_path)
+        resume_text = await extract_text_from_pdf(file_path)
     elif filename.endswith('.docx') or filename.endswith('.doc'):
-        resume_text = extract_text_from_docx(file_path)
+        resume_text = await extract_text_from_docx(file_path)
     else:
         return None, None
     
@@ -290,8 +304,12 @@ def create_cover_letter_chain(api_key):
     
     return RunnableSequence(prompt, llm, parser)
 
+
 # Document creation functions
-def create_docx_document(content, document_type="resume"):
+async def create_docx_document(content, document_type="resume"):
+    return await _sync_create_docx_document(content, document_type)
+
+async def _sync_create_docx_document(content, document_type):
     doc = DocxDocument()
     sections = content.split('\n\n')
     for section in sections:
@@ -302,7 +320,10 @@ def create_docx_document(content, document_type="resume"):
     file_obj.seek(0)
     return file_obj
 
-def create_pdf_document(content, document_type="resume"):
+async def create_pdf_document(content, document_type="resume"):
+    return await _sync_create_pdf_document(content, document_type)
+
+async def _sync_create_pdf_document(content, document_type):
     file_obj = BytesIO()
     doc = SimpleDocTemplate(file_obj, pagesize=letter)
     styles = getSampleStyleSheet()

@@ -2,6 +2,7 @@ import os
 import tempfile
 import uuid
 import json
+import asyncio
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, jsonify, send_file
 from datetime import datetime
@@ -24,13 +25,21 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max file size
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
+# Async helper functions
+async def run_async(func, *args, **kwargs):
+    loop = asyncio.get_event_loop()
+    if asyncio.iscoroutinefunction(func):
+        return await func(*args, **kwargs)
+    else:
+        return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
+
 # Flask routes
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/analyze-ats', methods=['POST'])
-def analyze_ats():
+async def analyze_ats():
     if 'resume' not in request.files:
         return jsonify({'error': 'No resume file uploaded'}), 400
     
@@ -44,35 +53,39 @@ def analyze_ats():
         return jsonify({'error': 'Job description is required'}), 400
     
     # Process resume
-    resume_text, file_path = process_resume_file(resume_file, app.config['UPLOAD_FOLDER'])
+    resume_text, file_path = await process_resume_file(resume_file, app.config['UPLOAD_FOLDER'])
     if not resume_text:
         return jsonify({'error': 'Could not extract text from resume'}), 400
     
-    # Run ATS analysis
+    # Create chains
     ats_chain = create_ats_analysis_chain(openai_api_key)
-    original_ats_result = ats_chain.invoke({"resume_text": resume_text, "job_description": job_description})
-
-    # Optimize resume
     optimization_chain = create_resume_optimization_chain(openai_api_key)
-    optimization_result = optimization_chain.invoke({
+    
+    # Run ATS analysis
+    original_ats_result = await run_async(ats_chain.invoke, {
+        "resume_text": resume_text,
+        "job_description": job_description
+    })
+    
+    # Optimize resume
+    optimization_result = await run_async(optimization_chain.invoke, {
         "resume_text": resume_text,
         "job_description": job_description,
         "ats_analysis": json.dumps(original_ats_result.model_dump())
     })
-
+    
     # Create session
     session_id = str(uuid.uuid4())
     temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
     os.makedirs(temp_dir, exist_ok=True)
     
     # Store data
-    with open(os.path.join(temp_dir, 'ats_data.json'), 'w') as f:
-        json.dump({
-            'resume_text': resume_text,
-            'job_description': job_description,
-            'original_ats_analysis': original_ats_result.model_dump(),
-            'optimization_result': optimization_result.model_dump()
-        }, f)
+    await run_async(lambda: json.dump({
+        'resume_text': resume_text,
+        'job_description': job_description,
+        'original_ats_analysis': original_ats_result.model_dump(),
+        'optimization_result': optimization_result.model_dump()
+    }, open(os.path.join(temp_dir, 'ats_data.json'), 'w')))
     
     return jsonify({
         'session_id': session_id,
@@ -81,7 +94,7 @@ def analyze_ats():
     })
 
 @app.route('/generate-cover-letter', methods=['POST'])
-def generate_cover_letter():
+async def generate_cover_letter():
     if 'resume' not in request.files:
         return jsonify({'error': 'No resume file uploaded'}), 400
     
@@ -95,13 +108,13 @@ def generate_cover_letter():
         return jsonify({'error': 'Job description is required'}), 400
     
     # Process resume
-    resume_text, file_path = process_resume_file(resume_file, app.config['UPLOAD_FOLDER'])
+    resume_text, file_path = await run_async(process_resume_file, resume_file, app.config['UPLOAD_FOLDER'])
     if not resume_text:
         return jsonify({'error': 'Could not extract text from resume'}), 400
     
     # Generate cover letter
     cover_letter_chain = create_cover_letter_chain(openai_api_key)
-    cover_letter_result = cover_letter_chain.invoke({
+    cover_letter_result = await run_async(cover_letter_chain.invoke, {
         "resume_text": resume_text,
         "job_description": job_description
     })
@@ -112,12 +125,11 @@ def generate_cover_letter():
     os.makedirs(temp_dir, exist_ok=True)
     
     # Store data
-    with open(os.path.join(temp_dir, 'cover_letter_data.json'), 'w') as f:
-        json.dump({
-            'resume_text': resume_text,
-            'job_description': job_description,
-            'cover_letter': cover_letter_result.model_dump()  
-        }, f)
+    await run_async(lambda: json.dump({
+        'resume_text': resume_text,
+        'job_description': job_description,
+        'cover_letter': cover_letter_result.model_dump()  
+    }, open(os.path.join(temp_dir, 'cover_letter_data.json'), 'w')))
     
     return jsonify({
         'session_id': session_id,
@@ -125,42 +137,40 @@ def generate_cover_letter():
     })
 
 @app.route('/regenerate-ats/<session_id>', methods=['POST'])
-def regenerate_ats(session_id):
+async def regenerate_ats(session_id):
     temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
     data_file = os.path.join(temp_dir, 'ats_data.json')
     
     if not os.path.exists(data_file):
         return jsonify({'error': 'Session data not found'}), 404
     
-    with open(data_file, 'r') as f:
-        data = json.load(f)
+    data = await run_async(lambda: json.load(open(data_file, 'r')))
     
     resume_text = data['resume_text']
     job_description = data['job_description']
     
     # Re-run analysis
     ats_chain = create_ats_analysis_chain(openai_api_key)
-    original_ats_result = ats_chain.invoke({
+    original_ats_result = await run_async(ats_chain.invoke, {
         "resume_text": resume_text,
         "job_description": job_description
     })
     
     # Re-run optimization
     optimization_chain = create_resume_optimization_chain(openai_api_key)
-    optimization_result = optimization_chain.invoke({
+    optimization_result = await run_async(optimization_chain.invoke, {
         "resume_text": resume_text,
         "job_description": job_description,
         "ats_analysis": json.dumps(original_ats_result.model_dump())
     })
     
     # Update data
-    with open(data_file, 'w') as f:
-        json.dump({
-            'resume_text': resume_text,
-            'job_description': job_description,
-            'original_ats_analysis': original_ats_result.model_dump(),
-            'optimization_result': optimization_result.model_dump()
-        }, f)
+    await run_async(lambda: json.dump({
+        'resume_text': resume_text,
+        'job_description': job_description,
+        'original_ats_analysis': original_ats_result.model_dump(),
+        'optimization_result': optimization_result.model_dump()
+    }, open(data_file, 'w')))
     
     return jsonify({
         'ats_analysis': original_ats_result.model_dump(),
@@ -168,40 +178,38 @@ def regenerate_ats(session_id):
     })
 
 @app.route('/regenerate-cover-letter/<session_id>', methods=['POST'])
-def regenerate_cover_letter(session_id):
+async def regenerate_cover_letter(session_id):
     temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
     data_file = os.path.join(temp_dir, 'cover_letter_data.json')
     
     if not os.path.exists(data_file):
         return jsonify({'error': 'Session data not found'}), 404
     
-    with open(data_file, 'r') as f:
-        data = json.load(f)
+    data = await run_async(lambda: json.load(open(data_file, 'r')))
     
     resume_text = data['resume_text']
     job_description = data['job_description']
     
     # Re-generate cover letter
     cover_letter_chain = create_cover_letter_chain(openai_api_key)
-    cover_letter_result = cover_letter_chain.invoke({
+    cover_letter_result = await run_async(cover_letter_chain.invoke, {
         "resume_text": resume_text,
         "job_description": job_description
     })
     
     # Update data 
-    with open(data_file, 'w') as f:
-        json.dump({
-            'resume_text': resume_text,
-            'job_description': job_description,
-            'cover_letter': cover_letter_result.model_dump()  
-        }, f)
+    await run_async(lambda: json.dump({
+        'resume_text': resume_text,
+        'job_description': job_description,
+        'cover_letter': cover_letter_result.model_dump()  
+    }, open(data_file, 'w')))
     
     return jsonify({
         'cover_letter': cover_letter_result.cover_letter_text  
     })
 
 @app.route('/preview/<document_type>/<session_id>')
-def preview_document(document_type, session_id):
+async def preview_document(document_type, session_id):
     temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
     
     if document_type == 'resume':
@@ -227,29 +235,30 @@ def preview_document(document_type, session_id):
         original_score = data['original_ats_analysis']['total_ats_score']
         optimized_score = data.get('optimized_ats_analysis', {}).get('total_ats_score', 0)
         
-        return jsonify({
+        # Return JSON response directly instead of using jsonify
+        return {
             'content': content,
             'score_comparison': {
                 'original_score': original_score,
                 'optimized_score': optimized_score
             }
-        })
+        }
         
     elif document_type == 'cover_letter':
         data_file = os.path.join(temp_dir, 'cover_letter_data.json')
         if not os.path.exists(data_file):
-            return jsonify({'error': 'Session data not found'}), 404
+            return {'error': 'Session data not found'}, 404
         
         with open(data_file, 'r') as f:
             data = json.load(f)
         
         content = data['cover_letter']['cover_letter_text']
-        return jsonify({'content': content})
+        return {'content': content}
     else:
-        return jsonify({'error': 'Invalid document type'}), 400
+        return {'error': 'Invalid document type'}, 400
 
 @app.route('/download/<file_type>/<document_type>/<session_id>')
-def download_document(file_type, document_type, session_id):
+async def download_document(file_type, document_type, session_id):
     temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
     
     if document_type == 'resume':
@@ -276,12 +285,12 @@ def download_document(file_type, document_type, session_id):
     else:
         return jsonify({'error': 'Invalid document type'}), 400
     
-    # Generate file
+    # Generate file asynchronously
     if file_type == 'docx':
-        file_obj = create_docx_document(content, document_type)
+        file_obj = await create_docx_document(content, document_type)
         mimetype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     elif file_type == 'pdf':
-        file_obj = create_pdf_document(content, document_type)
+        file_obj = await create_pdf_document(content, document_type)
         mimetype = 'application/pdf'
     else:
         return jsonify({'error': 'Invalid file type'}), 400
@@ -294,4 +303,5 @@ def download_document(file_type, document_type, session_id):
     )
 
 if __name__ == '__main__':
+    # Use hypercorn for production ASGI server
     app.run(host='0.0.0.0', port=5000, debug=True)
