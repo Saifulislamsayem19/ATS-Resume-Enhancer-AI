@@ -27,10 +27,10 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 
 # Async helper functions
 async def run_async(func, *args, **kwargs):
-    loop = asyncio.get_event_loop()
     if asyncio.iscoroutinefunction(func):
         return await func(*args, **kwargs)
     else:
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 # Flask routes
@@ -212,50 +212,38 @@ async def regenerate_cover_letter(session_id):
 async def preview_document(document_type, session_id):
     temp_dir = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
     
-    if document_type == 'resume':
-        data_file = os.path.join(temp_dir, 'ats_data.json')
-        if not os.path.exists(data_file):
-            return jsonify({'error': 'Session data not found'}), 404
-        
-        with open(data_file, 'r') as f:
-            data = json.load(f)
-        
-        # Run optimized ATS analysis if needed
-        if 'optimized_ats_analysis' not in data:
-            ats_chain = create_ats_analysis_chain(openai_api_key)
-            optimized_ats_result = ats_chain.invoke({
-                "resume_text": data['optimization_result']['improved_resume_text'],
-                "job_description": data['job_description']
+    try:
+        if document_type == 'resume':
+            data_file = os.path.join(temp_dir, 'ats_data.json')
+            if not os.path.exists(data_file):
+                return jsonify({'error': 'Session data not found'}), 404
+            
+            with open(data_file, 'r') as f:
+                data = json.load(f)
+            
+            content = data['optimization_result']['improved_resume_text']
+            return jsonify({
+                'content': content,
+                'score_comparison': {
+                    'original_score': data['original_ats_analysis']['total_ats_score'],
+                    'optimized_score': data.get('optimized_ats_analysis', {}).get('total_ats_score', 0)
+                }
             })
-            data['optimized_ats_analysis'] = optimized_ats_result.model_dump()
-            with open(data_file, 'w') as f:
-                json.dump(data, f)
+            
+        elif document_type == 'cover_letter':
+            data_file = os.path.join(temp_dir, 'cover_letter_data.json')
+            if not os.path.exists(data_file):
+                return jsonify({'error': 'Session data not found'}), 404
+            
+            with open(data_file, 'r') as f:
+                data = json.load(f)
+            
+            content = data['cover_letter']['cover_letter_text']
+            return jsonify({'content': content})
         
-        content = data['optimization_result']['improved_resume_text']
-        original_score = data['original_ats_analysis']['total_ats_score']
-        optimized_score = data.get('optimized_ats_analysis', {}).get('total_ats_score', 0)
-        
-        # Return JSON response directly instead of using jsonify
-        return {
-            'content': content,
-            'score_comparison': {
-                'original_score': original_score,
-                'optimized_score': optimized_score
-            }
-        }
-        
-    elif document_type == 'cover_letter':
-        data_file = os.path.join(temp_dir, 'cover_letter_data.json')
-        if not os.path.exists(data_file):
-            return {'error': 'Session data not found'}, 404
-        
-        with open(data_file, 'r') as f:
-            data = json.load(f)
-        
-        content = data['cover_letter']['cover_letter_text']
-        return {'content': content}
-    else:
-        return {'error': 'Invalid document type'}, 400
+        return jsonify({'error': 'Invalid document type'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/download/<file_type>/<document_type>/<session_id>')
 async def download_document(file_type, document_type, session_id):
