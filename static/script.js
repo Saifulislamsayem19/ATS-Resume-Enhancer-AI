@@ -1,5 +1,3 @@
-// ResumeAI JavaScript for handling interactions and API calls - Updated for Celery tasks
-
 document.addEventListener('DOMContentLoaded', function() {
     // Element references
     const resumeForm = document.getElementById('resume-form');
@@ -44,7 +42,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentAtsSessionId = null;
     let currentCoverLetterSessionId = null;
     let currentPreviewType = null;
-    let currentTaskId = null;
     
     // Handle file selection display
     resumeInput.addEventListener('change', function() {
@@ -182,12 +179,18 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(data => {
-            // Store session ID and task ID
+            // Store session ID for downloads
             currentAtsSessionId = data.session_id;
-            currentTaskId = data.task_id;
             
-            // Start polling task status
-            pollTaskStatus(currentTaskId, 'ats');
+            // Complete progress animation
+            completeProgress();
+            
+            // Populate ATS results
+            setTimeout(() => {
+                populateAtsResults(data);
+                loadingSection.classList.add('hidden');
+                atsResultsSection.classList.remove('hidden');
+            }, 500);
         })
         .catch(error => {
             console.error('Error:', error);
@@ -226,99 +229,22 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(data => {
-            // Store session ID and task ID
+            // Store session ID for downloads
             currentCoverLetterSessionId = data.session_id;
-            currentTaskId = data.task_id;
             
-            // Start polling task status
-            pollTaskStatus(currentTaskId, 'cover_letter');
+            // Complete progress animation
+            completeProgress();
+            
+            // Populate cover letter results
+            setTimeout(() => {
+                populateCoverLetterResults(data);
+                loadingSection.classList.add('hidden');
+                coverLetterResultsSection.classList.remove('hidden');
+            }, 500);
         })
         .catch(error => {
             console.error('Error:', error);
             alert(`An error occurred during cover letter generation: ${error.message}`);
-            resetApplication();
-        });
-    }
-    
-    // Poll task status until completion
-    function pollTaskStatus(taskId, taskType) {
-        fetch(`/task-status/${taskId}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to get task status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.state === 'SUCCESS') {
-                // Task completed successfully
-                completeProgress();
-                
-                // Fetch the results
-                setTimeout(() => {
-                    if (taskType === 'ats') {
-                        fetchAtsResults(currentAtsSessionId);
-                    } else {
-                        fetchCoverLetterResults(currentCoverLetterSessionId);
-                    }
-                }, 500);
-            } 
-            else if (data.state === 'FAILURE') {
-                throw new Error(data.status || 'Task failed');
-            }
-            else if (data.state === 'PENDING' || data.state === 'PROGRESS') {
-                // Still processing, check again after 2 seconds
-                setTimeout(() => pollTaskStatus(taskId, taskType), 2000);
-            }
-        })
-        .catch(error => {
-            console.error('Error polling task:', error);
-            alert(`An error occurred: ${error.message}`);
-            resetApplication();
-        });
-    }
-    
-    // Fetch ATS results after task completion
-    function fetchAtsResults(sessionId) {
-        fetch(`/preview/resume/${sessionId}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to fetch results: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Populate ATS results
-            populateAtsResults(data);
-            
-            // Hide loading and show results
-            loadingSection.classList.add('hidden');
-            atsResultsSection.classList.remove('hidden');
-        })
-        .catch(error => {
-            console.error('Error fetching results:', error);
-            alert(`Failed to load ATS results: ${error.message}`);
-            resetApplication();
-        });
-    }
-    
-    // Fetch cover letter results after task completion
-    function fetchCoverLetterResults(sessionId) {
-        fetch(`/preview/cover_letter/${sessionId}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to fetch results: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            populateCoverLetterResults(data);
-            loadingSection.classList.add('hidden');
-            coverLetterResultsSection.classList.remove('hidden');
-        })
-        .catch(error => {
-            console.error('Error fetching results:', error);
-            alert(`Failed to load cover letter results: ${error.message}`);
             resetApplication();
         });
     }
@@ -340,8 +266,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(data => {
-            currentTaskId = data.task_id;
-            pollTaskStatus(currentTaskId, 'ats');
+            completeProgress();
+            setTimeout(() => {
+                populateAtsResults(data);
+                loadingSection.classList.add('hidden');
+                atsResultsSection.classList.remove('hidden');
+            }, 500);
         })
         .catch(error => {
             console.error('Error:', error);
@@ -368,8 +298,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(data => {
-            currentTaskId = data.task_id;
-            pollTaskStatus(currentTaskId, 'cover_letter');
+            completeProgress();
+            setTimeout(() => {
+                populateCoverLetterResults(data);
+                loadingSection.classList.add('hidden');
+                coverLetterResultsSection.classList.remove('hidden');
+            }, 500);
         })
         .catch(error => {
             console.error('Error:', error);
@@ -452,9 +386,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Populate ATS results in the UI
     function populateAtsResults(data) {
         // Extract ATS Analysis from data (using original analysis for display)
-        const atsAnalysis = data.original_ats_analysis || {};
+        const atsAnalysis = data.ats_analysis || {};
         const optimizedAtsAnalysis = data.optimized_ats_analysis || {};
-        const optimization = data.optimization_result || {};
         
         // Ensure all required fields are present with defaults
         const atsScores = {
@@ -464,10 +397,6 @@ document.addEventListener('DOMContentLoaded', function() {
             section_completion_percentage: parseFloat(atsAnalysis.section_completion_percentage || 0),
             proximity_score: parseFloat(atsAnalysis.proximity_score || 0),
             total_ats_score: parseFloat(atsAnalysis.total_ats_score || 0)
-        };
-        
-        const optimizedScores = {
-            total_ats_score: parseFloat(optimizedAtsAnalysis.total_ats_score || 0)
         };
         
         // Group suggestions by their proper categories
@@ -551,6 +480,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Resume optimization
+        const optimization = data.optimization_result || {};
         
         // Improved summary
         const improvedSummaryElement = document.getElementById('improved-summary');
@@ -613,20 +543,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
         }
-        
-        // Show score improvement
-        const improvement = optimizedScores.total_ats_score - atsScores.total_ats_score;
-        if (improvement > 0) {
-            document.getElementById('score-improvement').textContent = 
-                `+${Math.round(improvement)} points after optimization`;
-        }
     }
     
     // Populate cover letter results
     function populateCoverLetterResults(data) {
         const coverLetterPreview = document.getElementById('cover-letter-preview');
         if (coverLetterPreview && data.cover_letter) {
-            coverLetterPreview.textContent = data.cover_letter.cover_letter_text;
+            coverLetterPreview.textContent = data.cover_letter;
         }
     }
     
@@ -637,39 +560,28 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`/preview/${documentType}/${sessionId}`)
         .then(response => {
             if (!response.ok) {
-                return response.json().then(err => {
-                    throw new Error(err.error || 'Failed to load preview');
-                });
+                throw new Error('Failed to load preview');
             }
             return response.json();
         })
         .then(data => {
             previewTitle.textContent = documentType === 'resume' ? 'Resume Preview' : 'Cover Letter Preview';
             
-            // Format content with preserved structure
             if (documentType === 'resume') {
                 previewContent.innerHTML = formatResumeContent(data.content);
+                // Handle score comparison
+                if (data.score_comparison && scoreComparisonSection) {
+                    scoreComparisonSection.classList.remove('hidden');
+                    const originalScore = Math.round(data.score_comparison.original_score);
+                    const optimizedScore = Math.round(data.score_comparison.optimized_score);
+                    originalScoreValue.textContent = originalScore;
+                    optimizedScoreValue.textContent = optimizedScore;
+                }
             } else {
                 previewContent.innerHTML = formatCoverLetterContent(data.content);
-            }
-            
-            // Show score comparison for resume preview
-            if (documentType === 'resume' && data.score_comparison && scoreComparisonSection) {
-                scoreComparisonSection.classList.remove('hidden');
-                
-                const originalScore = Math.round(data.score_comparison.original_score);
-                const optimizedScore = Math.round(data.score_comparison.optimized_score);
-                const improvement = optimizedScore - originalScore;
-                
-                if (originalScoreValue) originalScoreValue.textContent = originalScore;
-                if (optimizedScoreValue) optimizedScoreValue.textContent = optimizedScore;
-                if (improvementValue) improvementValue.textContent = improvement;
-                if (improvementPercentage) {
-                    const percentage = Math.round((improvement / originalScore) * 100);
-                    improvementPercentage.textContent = percentage > 0 ? `+${percentage}%` : `${percentage}%`;
+                if (scoreComparisonSection) {
+                    scoreComparisonSection.classList.add('hidden');
                 }
-            } else if (scoreComparisonSection) {
-                scoreComparisonSection.classList.add('hidden');
             }
             
             previewModal.classList.remove('hidden');
@@ -852,6 +764,5 @@ document.addEventListener('DOMContentLoaded', function() {
         // Reset session IDs
         currentAtsSessionId = null;
         currentCoverLetterSessionId = null;
-        currentTaskId = null;
     }
 });
