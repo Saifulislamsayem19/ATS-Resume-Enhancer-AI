@@ -50,26 +50,24 @@ class CoverLetterOutput(BaseModel):
 
 # File processing functions
 async def extract_text_from_pdf(file_path):
-    return await _sync_extract_text_from_pdf(file_path)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _sync_extract_text_from_pdf, file_path)
 
-async def _sync_extract_text_from_pdf(file_path):
-    # Keep this as async but remove the thread pool executor
+def _sync_extract_text_from_pdf(file_path):
     text = ""
     with open(file_path, 'rb') as file:
         pdf_reader = PyPDF2.PdfReader(file)
         for page in pdf_reader.pages:
-            text += page.extract_text()
+            text += page.extract_text() or ""  
     return text
 
-# Similarly update other extraction functions
 async def extract_text_from_docx(file_path):
-    return await _sync_extract_text_from_docx(file_path)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _sync_extract_text_from_docx, file_path)
 
-async def _sync_extract_text_from_docx(file_path):
+def _sync_extract_text_from_docx(file_path):
     doc = docx.Document(file_path)
-    full_text = []
-    for para in doc.paragraphs:
-        full_text.append(para.text)
+    full_text = [para.text for para in doc.paragraphs]
     return '\n'.join(full_text)
 
 # Simplify the file processing
@@ -77,14 +75,14 @@ async def process_resume_file(file, upload_folder):
     filename = secure_filename(file.filename)
     file_path = os.path.join(upload_folder, filename)
     
-    # Save file
-    with open(file_path, 'wb') as f:
-        f.write(file.read())
+    # Save file asynchronously
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, file.save, file_path)
     
     # Extract text based on file type
     if filename.endswith('.pdf'):
         resume_text = await extract_text_from_pdf(file_path)
-    elif filename.endswith('.docx') or filename.endswith('.doc'):
+    elif filename.endswith(('.docx', '.doc')):
         resume_text = await extract_text_from_docx(file_path)
     else:
         return None, None
